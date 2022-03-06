@@ -80,7 +80,7 @@ def make_redirect(source, destination, args, retry=0):
     headers = REQUEST_HEADERS
 
     if args.verbose:
-        print("POST " + REDIRECT_URL, headers, json_data)
+        print(f"POST {REDIRECT_URL}", headers, json_data)
 
     if args.dry_run:
         print(f"Created redirect {source} -> {destination} (DRY RUN)")
@@ -113,7 +113,7 @@ def sleep():
 
 
 def id(from_url, to_url):
-    return from_url + " -> " + to_url
+    return f'{from_url} -> {to_url}'
 
 
 def get_paginated(url, parameters={"limit": DEFAULT_PAGINATED_SIZE}):
@@ -129,7 +129,7 @@ def get_paginated(url, parameters={"limit": DEFAULT_PAGINATED_SIZE}):
         if data.status_code != 200:
             if data.status_code == 401:
                 print("Access denied, check RTD API key in RTD_AUTH_TOKEN!")
-            print("Error accessing RTD API: " + url + ": " + str(data.status_code))
+            print(f"Error accessing RTD API: {url}: {str(data.status_code)}")
             exit(1)
         else:
             json = data.json()
@@ -143,8 +143,17 @@ def get_paginated(url, parameters={"limit": DEFAULT_PAGINATED_SIZE}):
                 continue
         if count > 0 and len(entries) != count:
             print(
-                "Mismatch getting paginated content from " + url + ": " +
-                "expected " + str(count) + " items, got " + str(len(entries)))
+                (
+                    (
+                        f"Mismatch getting paginated content from {url}: "
+                        + "expected "
+                    )
+                    + str(count)
+                    + " items, got "
+                )
+                + str(len(entries))
+            )
+
             exit(1)
         return entries
 
@@ -199,10 +208,7 @@ def load_auth():
 
 
 def has_suffix(s, suffixes):
-    for suffix in suffixes:
-        if s.endswith(suffix):
-            return True
-    return False
+    return any(s.endswith(suffix) for suffix in suffixes)
 
 
 def is_valid_redirect_url(url):
@@ -237,23 +243,19 @@ def main():
         HTTP.mount("https://", adapter)
         HTTP.mount("http://", adapter)
 
-    to_add = []
     redirects_file = []
     with open(args.file, "r", encoding="utf-8") as f:
         redirects_file = list(csv.DictReader(f))
-        if len(redirects_file) > 0:
+        if redirects_file:
             assert redirects_file[0].keys() == {
                 "source",
                 "destination",
             }, "CSV file must have a header and two columns: source, destination."
 
-    for row in redirects_file:
-        to_add.append([row["source"], row["destination"]])
-    print("Loaded", len(redirects_file), "redirects from", args.file + ".")
+    to_add = [[row["source"], row["destination"]] for row in redirects_file]
+    print("Loaded", len(redirects_file), "redirects from", f'{args.file}.')
 
-    existing = []
-    if not args.dry_run:
-        existing = get_existing_redirects(args.delete)
+    existing = get_existing_redirects(args.delete) if not args.dry_run else []
     print("Loaded", len(existing), "existing redirects from RTD.")
 
     print("Total redirects:", str(len(to_add)) +
@@ -302,14 +304,11 @@ def main():
         writer.writerows([["source", "destination"]])
         writer.writerows(redirects)
 
-    existing_ids = {}
-    for e in existing:
-        existing_ids[id(e[0], e[1])] = True
-
+    existing_ids = {id(e[0], e[1]): True for e in existing}
     if not args.dump:
         print("Creating redirects.")
         for redirect in redirects:
-            if not id(redirect[0], redirect[1]) in existing_ids:
+            if id(redirect[0], redirect[1]) not in existing_ids:
                 make_redirect(redirect[0], redirect[1], args)
 
             if not args.dry_run:
